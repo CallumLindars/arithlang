@@ -81,6 +81,7 @@ application {
 //    connected for the interactive REPL.
 tasks.named('run', JavaExec) {
     dependsOn 'classes'
+    mainClass = 'Wrapper'
     workingDir = projectDir
     standardInput = System.in
 }
@@ -90,11 +91,4 @@ tasks.named('jar', Jar) {
     manifest { attributes 'Main-Class': project.mainClassName }
     from { configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-}
-
-// 4) Run autograder
-tasks.register('autograder', JavaExec) {
-    dependsOn classes
-    classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'autograder.Autograder'
 }

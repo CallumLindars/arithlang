@@ -8,7 +8,7 @@ public class Evaluator implements Visitor<Value> {
 	
 	Printer.Formatter ts = new Printer.Formatter();
 	
-	Value valueOf(Program p) {
+	public Value valueOf(Program p) {
 		// Value of a program in this language is the value of the expression
 		return (Value) p.accept(this);
 	}

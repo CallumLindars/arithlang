@@ -15,7 +15,7 @@ public interface AST {
 		public abstract <T> T accept(Visitor<T> visitor);
 	}
 	public static class Program extends ASTNode {
-		Exp _e;
+		public Exp _e;
 
 		public Program(Exp e) {
 			_e = e;
