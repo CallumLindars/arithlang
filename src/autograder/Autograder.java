@@ -1,25 +1,28 @@
 package autograder;
 
 import java.io.IOException;
-import arithlang.*;
-import arithlang.AST.Program;
-
 import java.io.BufferedReader;
 import java.io.FileReader;
-import java.io.File;
-import java.io.InputStreamReader;
 import java.nio.file.*;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.regex.*;
-import java.util.stream.Stream;
+import java.util.List;
 
+import arithlang.*;
+import arithlang.AST.Program;
+import autograder.AutograderErrorListener.SyntaxError;
+
+/**
+ * Reads input test cases from <code>autograder/testcases/</code> sorted by folder.
+ * @author CallumLindars
+ * 
+ * 
+*/
 public class Autograder {
     public static void main(String[] args){
-        System.out.println("===== AUTOGRADER =====");
-        Reader reader = new Reader();
+        System.out.println("===== AUTOGRADER ====\n");
+
+        AutograderReader reader = new AutograderReader();
         Evaluator eval = new Evaluator();
-        Printer printer = new Printer();
 
         // For each question in the hw
         try (DirectoryStream<Path> questionStream = Files.newDirectoryStream(Paths.get("src/autograder/testcases"))) {
@@ -27,70 +30,325 @@ public class Autograder {
                 if (Files.isRegularFile(questionPath)) {
                     continue;
                 }
+                //For each test file in the question folder
                 try (DirectoryStream<Path> testCaseStream = Files.newDirectoryStream(Paths.get(questionPath.toString()))) {
                     for (Path testCasePath : testCaseStream) {
-                        testSet set = readFile(testCasePath);
-                        Boolean[] fails = new Boolean[set.tests.size()];
-                        Arrays.fill(fails, false);
-
-                        for(int i = 0; i < set.tests.size(); i++){
-                            Program p = null;
-                            try {
-                                p = reader.parse(set.tests.get(i));
-                                if(p._e == null) continue;
-                                Value val = eval.valueOf(p);
-                                if (val.toString() != set.ans.get(i).toString()) {
-                                    fails[i] = true;
-                                }
-                            } catch (NullPointerException e) {
-                                System.out.println("Error:" + e.getMessage());
-                            }
+                        if(!testCasePath.toString().endsWith(".test")){
+                            continue;
                         }
 
-                        System.out.println(Arrays.toString(fails));
+                        TestSet set = readFile(testCasePath);
+                        set.question = questionPath.subpath(3, 4).toString();
+
+                        //TODO get scoring
+                        runTestSet(set, reader, eval);
                     }
                 }
             }
+
+            //TODO print final score
         }
         catch (IOException e){
             System.err.println("Error reading file: " + e.getMessage());
         }
     }
 
-    private static testSet readFile(Path file) throws IOException{
-        try (BufferedReader br = new BufferedReader(new FileReader(file.toFile()))) {
-            String[] metadata = br.readLine().split(",");
-            
-            String testName = metadata[0].strip();
-            String length = metadata[1].strip();
+    /**
+     * Run a collection of tests
+     * @param set TestSet to run
+     * @param reader language reader
+     * @param eval language evaluator
+     */
+    private static void runTestSet(TestSet set, AutograderReader reader, Evaluator eval){
+        //TODO add scoring for questions
 
+        //TODO add question grouping based on folder structure
+        System.out.printf("\nQuestion: %s\n===========\n\n", set.question);
 
-            ArrayList<String> tests = new ArrayList<>();
-            ArrayList<String> answers = new ArrayList<>();
+        ResultSet results = new ResultSet();
+        for(int i = 0; i < set.size(); i++){
+            TestResult res = runTest(set.get(i), reader, eval);
+            res.row = set.get(i).row;
+            results.add(res);
+        }
 
-            int i = Integer.parseInt(length);
-            while (i-- > 0) {
-                tests.add(br.readLine());
-                answers.add(br.readLine());
+        // If any error show error header
+        if(results.hasErrors() || results.hasFails()){
+            System.out.printf("*** FAIL: %s\n", set.path);
+        }
+
+        for(int i = 0; i < set.size(); i++){
+            TestResult result = results.get(i);
+
+            // Errors
+            if(!result.perror.isEmpty() || !result.lerror.isEmpty()){
+                System.out.printf("***\tFAIL: %s:%s\n", set.path, result.row);
+                for(SyntaxError e : result.lerror){
+                    System.out.printf(
+                        "***\t\tLexer error: %d:%d: %s%n",
+                        e.line(),
+                        e.column(),
+                        e.message()
+                    );
+                }
+                for(SyntaxError e : result.perror){
+                    System.out.printf(
+                        "***\t\tParser error: %d:%d: %s%n",
+                        e.line(),
+                        e.column(),
+                        e.message()
+                    );
+                }
+                if(result.note != null){
+                    System.out.printf("***\t\tNote: %s\n", result.note.toString().replace("\n", "\n***\t\t"));
+                }
             }
-            
-            return new testSet(metadata, tests, answers);
+
+            // If incorrect display student and correct solution + note if available
+            else if(!result.correct){
+                System.out.printf("***\tFAIL: %s:%s\n", set.path, result.row);
+                System.out.printf("***\tStudent Solution: %s\n", result.studentResponse);
+                System.out.printf("***\tCorrect Solution: %s\n", result.correctResponse);
+                if(result.note != null){
+                    System.out.printf("***\n***\t\tNote: %s\n", result.note.toString().replace("\n", "\n***\t\t"));
+                }
+            }
+
+            else if(result.correct){
+                System.out.println(result.correct.toString() + result.correctResponse.toString() + result.studentResponse);
+                System.out.printf("***PASS: %s:%s\n", set.path, result.row);
+            }
+
+            else{
+                System.err.println("Tell Callum to fix this...");
+            }
         }
     }
 
-    public static class testSet {
-        ArrayList<String> tests, ans;
-        String[] meta;
+    /**
+     * Run an individual test
+     * @param t Individual test to run
+     * @param reader language reader
+     * @param eval language evaluator
+     * @return TestResult with results from the test
+     */
+    private static TestResult runTest(Test t, AutograderReader reader, Evaluator eval){
+        List<AutograderErrorListener.SyntaxError> parserErrors = new ArrayList<>();
+        List<AutograderErrorListener.SyntaxError> lexerErrors = new ArrayList<>();
 
-        public testSet(String[] meta, ArrayList<String> tests, ArrayList<String> ans){
-            this.tests = tests;
-            this.ans = ans;
-            this.meta = meta;
+        Boolean correct = false;
+        Value val = null;
+        Program p = null;
+        try {
+            p = reader.parse(t.input);
+            lexerErrors.addAll(reader.lexerErrorListener.getErrors());
+            parserErrors.addAll(reader.parserErrorListener.getErrors());
+
+            reader.lexerErrorListener.clearErrors();
+            reader.parserErrorListener.clearErrors();
+            
+            if(p._e == null) return new TestResult(correct, lexerErrors, parserErrors, null, t.solution, t.note);
+            val = eval.valueOf(p);
+            if (val.toString().equals(t.solution.toString())) {
+                correct = true;
+            }
+        } catch (NullPointerException e) {
+            System.out.println("Error:" + e.getMessage());
+        }
+        return new TestResult(correct, lexerErrors, parserErrors, val.toString(), t.solution, t.note);
+    }
+
+    /**
+     * Turns a file path into a TestSet
+     * @param file file to read
+     * @return TestSet based on file read
+     * @throws IOException
+     */
+    private static TestSet readFile(Path file) throws IOException{
+        try (BufferedReader br = new BufferedReader(new FileReader(file.toFile()))) {
+            String[] metadata = new String[2];
+            int row = 3;
+
+            String name = br.readLine().split(":")[1].strip();
+            int numTests = Integer.parseInt(br.readLine().split(":")[1].strip());
+
+            metadata[0] = name;
+            metadata[1] = Integer.toString(numTests);
+
+            String[] inputs = new String[numTests];
+            String[] outputs = new String[numTests];
+            String[] notes = new String[numTests];
+            int[] weights = new int[numTests];
+            int[] locations = new int[numTests];
+
+            String text = br.readLine();
+            int i = -1;
+            while(text != null) {
+                if(text.startsWith("#")){
+                    text = br.readLine();
+                    row++;
+                    continue;
+                }
+                String[] line = text.split("#")[0].split(":");
+                switch (line[0]) {
+                    case "input":
+                        inputs[i] = line[1].strip();
+                        break;
+                    case "output":
+                        outputs[i] = line[1].strip();
+                        break;
+                    case "weight":
+                        weights[i] = Integer.parseInt(line[1].strip());
+                        break;
+                    case "note":
+                        String note = line[1].strip();
+
+                        while(!note.substring(note.indexOf("\"")+1).contains("\"")){
+                            note += br.readLine() + "\n";
+                            row++;
+                        }
+
+                        notes[i] = note.substring(1, note.length()-2);
+                        break;
+
+                    case "test":
+                        i++;
+                        locations[i] = row;
+                        break;
+
+                    case "":
+                        break;
+                
+                    default:
+                        System.err.println("Invalid Test Format");
+                }
+                text = br.readLine();
+                row++;
+            }
+
+            TestSet set = new TestSet(name);
+            set.path = file.toString();
+
+            for(int j = 0; j < numTests; j++){
+                set.add(new Test(j, inputs[j], outputs[j], notes[j], locations[j], weights[j]));
+            }
+
+            return set;
+        }
+    }
+    
+    /**
+     * Individual Test 
+     */
+    public static class Test {
+        int id, row, weight;
+        String input, solution, note;
+
+        public Test(int id, String input, String solution, String note, int loc, int weight){
+            this.id = id;
+            this.input = input;
+            this.solution = solution;
+            this.note = note;
+            this.row = loc;
+            this.weight = weight;
         }
 
         @Override 
         public String toString(){
-            return tests.toString() + ans.toString();
+            return String.format("Test ID: %s, Test Input: %s, Expected Solution: %s, Notes: %s", id, input, solution, note);
+        }
+    }
+
+    /**
+     * Collection of Tests
+     */
+    public static class TestSet {
+        String name;
+        String path;
+        String question;
+        List<Test> tests = new ArrayList<Test>();
+
+        public TestSet(String name){
+            this.name = name;
+        }
+
+        @Override 
+        public String toString(){
+            return tests.toString();
+        }
+
+        public void add(Test t){
+            tests.add(t);
+        }
+
+        public Test get(int i){
+            return tests.get(i);
+        }
+
+        public int size(){
+            return tests.size();
+        }
+    }
+
+    /**
+     * Result of Test run
+     */
+    public static class TestResult {
+        Boolean correct;
+        List<SyntaxError> lerror, perror;
+        int row;
+        String studentResponse, correctResponse, note;
+
+        public TestResult(Boolean correct, List<SyntaxError> lerror, List<SyntaxError> perror, String sr, String cr, String note){
+            this.correct = correct;
+            this.lerror = lerror;
+            this.perror = perror;
+            studentResponse = sr;
+            correctResponse = cr;
+            this.note = note;
+        }
+
+        @Override
+        public String toString() {
+            return "Test Result: " + correct.toString() + note;
+        }
+    }
+
+    public static class ResultSet {
+        List<TestResult> list = new ArrayList<>();
+
+        public void add(TestResult t){
+            list.add(t);
+        }
+
+        public Boolean hasErrors(){
+            for(TestResult t : list){
+                if(!t.perror.isEmpty()){
+                    return true;
+                }
+                if(!t.lerror.isEmpty()){
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        public Boolean hasFails(){
+            for(TestResult t : list){
+                if(!t.correct){
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        public TestResult get(int i){
+            return list.get(i);
+        }
+
+        @Override 
+        public String toString(){
+            return list.toString();
         }
     }
 }

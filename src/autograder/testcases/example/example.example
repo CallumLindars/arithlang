@@ -1,0 +1,20 @@
+name: example   # First line must be name of test set.
+tests: 0        # Second line must be number of tests.
+
+# Only `.test` files are recognized as test cases.
+
+# Tests are defined like below.
+
+# ID of the test, not really needed but used to mark where tests start and begin
+# for the file reader
+test: 1 # integer
+
+# Input
+input: (+ 1 1)# expression
+
+# Expected output
+output: 2
+
+# Notes on the specific test, notes can be multi-lined and must be surrounded by
+# quotations in order to be displayed.
+note: "This one is easy."
