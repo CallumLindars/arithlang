@@ -5,6 +5,7 @@ import java.io.BufferedReader;
 import java.io.FileReader;
 import java.nio.file.*;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 
 import arithlang.*;
@@ -27,9 +28,12 @@ public class Autograder {
         // For each question in the hw
         try (DirectoryStream<Path> questionStream = Files.newDirectoryStream(Paths.get("src/autograder/testcases"))) {
             for (Path questionPath : questionStream) {
-                if (Files.isRegularFile(questionPath)) {
+                if (Files.isRegularFile(questionPath) || isEmptyTestDir(questionPath)) {
                     continue;
                 }
+
+                System.out.printf("\nQuestion: %s\n===========\n\n", questionPath.subpath(3, 4).toString());
+
                 //For each test file in the question folder
                 try (DirectoryStream<Path> testCaseStream = Files.newDirectoryStream(Paths.get(questionPath.toString()))) {
                     for (Path testCasePath : testCaseStream) {
@@ -53,6 +57,27 @@ public class Autograder {
         }
     }
 
+    public static boolean isEmptyTestDir(Path path) throws IOException {
+        if (Files.isDirectory(path)) {
+            try (DirectoryStream<Path> directoryStream = Files.newDirectoryStream(path)) {
+                Iterator<Path> it = directoryStream.iterator();
+                if(!it.hasNext()) {
+                    return true;
+                }
+                else {
+                    while(it.hasNext()){
+                        Path file = it.next();
+                        if (file.toString().endsWith(".test")) { 
+                            return false;
+                        }
+                    }
+                    return true;
+                }
+            }
+        }
+        return false; // Not a directory
+    }
+
     /**
      * Run a collection of tests
      * @param set TestSet to run
@@ -62,19 +87,22 @@ public class Autograder {
     private static void runTestSet(TestSet set, AutograderReader reader, Evaluator eval){
         //TODO add scoring for questions
 
-        //TODO add question grouping based on folder structure
-        System.out.printf("\nQuestion: %s\n===========\n\n", set.question);
-
         ResultSet results = new ResultSet();
         for(int i = 0; i < set.size(); i++){
             TestResult res = runTest(set.get(i), reader, eval);
             res.row = set.get(i).row;
+            res.id = set.get(i).id+1;
             results.add(res);
         }
 
         // If any error show error header
         if(results.hasErrors() || results.hasFails()){
-            System.out.printf("*** FAIL: %s\n", set.path);
+            System.out.printf("*** FAIL: %s %s\n", set.name, set.path);
+        }
+        // Return early if there are no errors (show passing whole file rather than each test case)
+        else{
+            System.out.printf("*** PASS: %s %s\n", set.name, set.path);
+            return;
         }
 
         for(int i = 0; i < set.size(); i++){
@@ -82,7 +110,7 @@ public class Autograder {
 
             // Errors
             if(!result.perror.isEmpty() || !result.lerror.isEmpty()){
-                System.out.printf("***\tFAIL: %s:%s\n", set.path, result.row);
+                System.out.printf("***\tFAIL: %s Test #%s %s:%s\n", set.name, result.id, set.path, result.row);
                 for(SyntaxError e : result.lerror){
                     System.out.printf(
                         "***\t\tLexer error: %d:%d: %s%n",
@@ -115,8 +143,7 @@ public class Autograder {
             }
 
             else if(result.correct){
-                System.out.println(result.correct.toString() + result.correctResponse.toString() + result.studentResponse);
-                System.out.printf("***PASS: %s:%s\n", set.path, result.row);
+                System.out.printf("***\tPASS: %s:%s\n", set.path, result.row);
             }
 
             else{
@@ -296,7 +323,7 @@ public class Autograder {
     public static class TestResult {
         Boolean correct;
         List<SyntaxError> lerror, perror;
-        int row;
+        int row, id;
         String studentResponse, correctResponse, note;
 
         public TestResult(Boolean correct, List<SyntaxError> lerror, List<SyntaxError> perror, String sr, String cr, String note){
