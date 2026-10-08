@@ -48,12 +48,20 @@ public class Autograder {
                         runTestSet(set, reader, eval);
                     }
                 }
+
+                //TODO print total question score
             }
 
             //TODO print final score
         }
         catch (IOException e){
             System.err.println("Error reading file: " + e.getMessage());
+        }
+        catch(IndexOutOfBoundsException e){
+            System.err.println("Incorrect defined question count: " + e.getMessage());
+        }
+        catch(InvalidTestSizeException e){
+            System.err.println("Incorrect defined question count: " + e.getMessage());
         }
     }
 
@@ -167,7 +175,9 @@ public class Autograder {
         Value val = null;
         Program p = null;
         try {
-            p = reader.parse(t.input);
+            for(String input : t.input){
+                p = reader.parse(input);
+            }
             lexerErrors.addAll(reader.lexerErrorListener.getErrors());
             parserErrors.addAll(reader.parserErrorListener.getErrors());
 
@@ -191,7 +201,7 @@ public class Autograder {
      * @return TestSet based on file read
      * @throws IOException
      */
-    private static TestSet readFile(Path file) throws IOException{
+    private static TestSet readFile(Path file) throws IOException, IndexOutOfBoundsException, InvalidTestSizeException{
         try (BufferedReader br = new BufferedReader(new FileReader(file.toFile()))) {
             String[] metadata = new String[2];
             int row = 3;
@@ -202,11 +212,16 @@ public class Autograder {
             metadata[0] = name;
             metadata[1] = Integer.toString(numTests);
 
-            String[] inputs = new String[numTests];
+            List<String>[] inputs = new ArrayList[numTests];
             String[] outputs = new String[numTests];
             String[] notes = new String[numTests];
             int[] weights = new int[numTests];
             int[] locations = new int[numTests];
+            List<Integer> clears = new ArrayList<>();
+
+            for(int i = 0; i < numTests; i++){
+                inputs[i] = new ArrayList<String>();
+            }
 
             String text = br.readLine();
             int i = -1;
@@ -216,10 +231,13 @@ public class Autograder {
                     row++;
                     continue;
                 }
-                String[] line = text.split("#")[0].split(":");
+                String[] line = text.strip().split("#")[0].split(":");
                 switch (line[0]) {
                     case "input":
-                        inputs[i] = line[1].strip();
+                        String[] test_inputs = line[1].strip().split(",");
+                        for(String input : test_inputs){
+                            inputs[i].add(input);
+                        }
                         break;
                     case "output":
                         outputs[i] = line[1].strip();
@@ -245,6 +263,10 @@ public class Autograder {
 
                     case "":
                         break;
+
+                    case "clear":
+                        clears.add(i);
+                        break;
                 
                     default:
                         System.err.println("Invalid Test Format");
@@ -253,12 +275,18 @@ public class Autograder {
                 row++;
             }
 
+            if(inputs[numTests-1].isEmpty()){
+                throw new InvalidTestSizeException("Number of tests is smaller than specified.");
+            }
+
             TestSet set = new TestSet(name);
             set.path = file.toString();
 
             for(int j = 0; j < numTests; j++){
                 set.add(new Test(j, inputs[j], outputs[j], notes[j], locations[j], weights[j]));
             }
+
+            set.clears = clears;
 
             return set;
         }
@@ -269,9 +297,10 @@ public class Autograder {
      */
     public static class Test {
         int id, row, weight;
-        String input, solution, note;
+        String solution, note;
+        List<String> input;
 
-        public Test(int id, String input, String solution, String note, int loc, int weight){
+        public Test(int id, List<String> input, String solution, String note, int loc, int weight){
             this.id = id;
             this.input = input;
             this.solution = solution;
@@ -293,6 +322,7 @@ public class Autograder {
         String name;
         String path;
         String question;
+        List<Integer> clears;
         List<Test> tests = new ArrayList<Test>();
 
         public TestSet(String name){
@@ -376,6 +406,12 @@ public class Autograder {
         @Override 
         public String toString(){
             return list.toString();
+        }
+    }
+
+    public static class InvalidTestSizeException extends Exception {
+        InvalidTestSizeException(String msg){
+            super(msg);
         }
     }
 }
