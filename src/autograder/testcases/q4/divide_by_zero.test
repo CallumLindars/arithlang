@@ -1,0 +1,18 @@
+name:: Divide-by-Zero
+tests:: 4
+
+test::
+    input:: (/ 2 0)
+    output:: Divide-by-zero error at: (/ 2.0 0.0)
+
+test::
+    input:: (- 279 (/ 2 0))
+    output:: Divide-by-zero error at: (/ 2.0 0.0)
+
+test::
+    input:: (/ 84 (- 279 (/ 2 0)))
+    output:: Divide-by-zero error at: (/ 2.0 0.0)
+
+test::
+    input:: (+ (* 3 100) (/ 84 (- 279 (/ 2 0))))
+    output:: Divide-by-zero error at: (/ 2.0 0.0)
