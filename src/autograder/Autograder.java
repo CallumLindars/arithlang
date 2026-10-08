@@ -5,8 +5,10 @@ import java.io.BufferedReader;
 import java.io.FileReader;
 import java.nio.file.*;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
+import java.util.stream.StreamSupport;
 
 import arithlang.*;
 import arithlang.AST.Program;
@@ -26,10 +28,15 @@ public class Autograder {
         Evaluator eval = new Evaluator();
 
         // For each question in the hw
-        try (DirectoryStream<Path> questionStream = Files.newDirectoryStream(Paths.get("src/autograder/testcases"))) {
-            for (Path questionPath : questionStream) {
-                if (Files.isRegularFile(questionPath) || isEmptyTestDir(questionPath)) {
-                    continue;
+        try {
+            DirectoryStream<Path> unsortedQuestionStream = Files.newDirectoryStream(Paths.get("src/autograder/testcases"));
+            StreamSupport.stream(unsortedQuestionStream.spliterator(), false).sorted(Comparator.comparing(Path::toString)).forEach(questionPath -> {
+                try {
+                    if (Files.isRegularFile(questionPath) || isEmptyTestDir(questionPath)) {
+                        return; // acts as continue
+                    }
+                } catch (IOException e) {
+                    e.printStackTrace();
                 }
 
                 System.out.printf("\nQuestion: %s\n===========\n\n", questionPath.subpath(3, 4).toString());
@@ -48,20 +55,27 @@ public class Autograder {
                         runTestSet(set, reader, eval);
                     }
                 }
+                catch (IOException e){
+                    e.printStackTrace();
+                }
+                catch(InvalidTestSizeException e){
+                    System.err.println("Incorrect defined question count: " + e.getMessage());
+                    e.printStackTrace();
+                }
 
                 //TODO print total question score
-            }
+            });
+            unsortedQuestionStream.close();
 
             //TODO print final score
         }
-        catch (IOException e){
+        catch(IOException e){
             System.err.println("Error reading file: " + e.getMessage());
+            e.printStackTrace();
         }
         catch(IndexOutOfBoundsException e){
             System.err.println("Incorrect defined question count: " + e.getMessage());
-        }
-        catch(InvalidTestSizeException e){
-            System.err.println("Incorrect defined question count: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
@@ -206,8 +220,8 @@ public class Autograder {
             String[] metadata = new String[2];
             int row = 3;
 
-            String name = br.readLine().split(":")[1].strip();
-            int numTests = Integer.parseInt(br.readLine().split(":")[1].strip());
+            String name = br.readLine().split("::")[1].strip();
+            int numTests = Integer.parseInt(br.readLine().split("::")[1].strip());
 
             metadata[0] = name;
             metadata[1] = Integer.toString(numTests);
@@ -231,7 +245,7 @@ public class Autograder {
                     row++;
                     continue;
                 }
-                String[] line = text.strip().split("#")[0].split(":");
+                String[] line = text.strip().split("#")[0].split("::");
                 switch (line[0]) {
                     case "input":
                         String[] test_inputs = line[1].strip().split(",");
