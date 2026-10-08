@@ -1,24 +1,24 @@
-name: Power Expression
-tests: 5
+name:: Power Expression
+tests:: 5
 
-test:
-    input: (** 2 4)
-    output: 16
+test::
+    input:: (** 2 4)
+    output:: 16
 
-test:
-    input: (** 3 3)
-    output: 27
+test::
+    input:: (** 3 3)
+    output:: 27
 
-test:
-    input: (** 1.27 2)
-    output: 1.6129
-    note: "Make sure your implementation allows for floating point operands."
+test::
+    input:: (** 1.27 2)
+    output:: 1.6129
+    note:: "Make sure your implementation allows for floating point operands."
 
-test:
-    input: (** 3 2 4)
-    output: 6561
-    note: "Make sure your implementation allows for more than 2 operands."
+test::
+    input:: (** 3 2 4)
+    output:: 6561
+    note:: "Make sure your implementation allows for more than 2 operands."
 
-test:
-    input: (** 8 0)
-    output: 1
+test::
+    input:: (** 8 0)
+    output:: 1

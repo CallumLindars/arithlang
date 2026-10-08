@@ -1,26 +1,26 @@
-name: Greatest, Least Expressions
-tests: 6
+name:: Greatest, Least Expressions
+tests:: 6
 
-test:
-    input: (>? 3)
-    output: 3
+test::
+    input:: (>? 3)
+    output:: 3
 
-test:
-    input: (<? 3)
-    output: 3
+test::
+    input:: (<? 3)
+    output:: 3
 
-test:
-    input: (>? 3 4 2)
-    output: 4
+test::
+    input:: (>? 3 4 2)
+    output:: 4
 
-test:
-    input: (<? 3 4 2)
-    output: 2
+test::
+    input:: (<? 3 4 2)
+    output:: 2
 
-test:
-    input: (>? 3 3)
-    output: 3
+test::
+    input:: (>? 3 3)
+    output:: 3
 
-test:
-    input: (<? 3 3)
-    output: 3
+test::
+    input:: (<? 3 3)
+    output:: 3
